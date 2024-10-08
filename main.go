@@ -20,12 +20,14 @@ func execute(cmd *cobra.Command, args []string) error {
 	w, _ := r.Worktree()
 
 	status, _ := w.Status()
-
 	if status.IsClean() {
 		return nil
 	}
 
-	w.AddGlob(".")
+	err = w.AddGlob(".")
+	if err != nil {
+		return err
+	}
 
 	_, err = w.Commit(msg, &git.CommitOptions{})
 	if err != nil {
