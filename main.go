@@ -18,6 +18,13 @@ func execute(cmd *cobra.Command, args []string) error {
 	}
 
 	w, _ := r.Worktree()
+
+	status, _ := w.Status()
+
+	if status.IsClean() {
+		return nil
+	}
+
 	w.AddGlob(".")
 
 	_, err = w.Commit(msg, &git.CommitOptions{})
