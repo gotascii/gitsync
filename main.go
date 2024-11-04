@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	git "github.com/go-git/go-git/v5"
@@ -44,18 +43,16 @@ func execute(cmd *cobra.Command, args []string) error {
 
 func main() {
 	var rootCmd = &cobra.Command{
-		Use:           "gitsync [path]",
-		Short:         "Sync a git repository",
-		RunE:          execute,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:          "gitsync",
+		Short:        "Sync a git repository",
+		RunE:         execute,
+		SilenceUsage: true,
 	}
 
 	rootCmd.PersistentFlags().String("msg", "Syncing", "sync commit message")
 	rootCmd.PersistentFlags().String("path", ".", "path to repo")
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 }
