@@ -1,39 +1,75 @@
 package main
 
 import (
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
-// Helper to set up a test repository with a remote
-func setupTestRepos(t *testing.T) (string, string) {
-	// Create temporary directories for local and remote repos
-	localPath := t.TempDir()
-	remotePath := t.TempDir()
-
-	// Initialize remote repo
-	remote, err := git.PlainInit(remotePath, false)
+func addRemoteRepo(t *testing.T, localPath string, remotePath string) {
+	localRepo, err := git.PlainOpen(localPath)
 	assert.NoError(t, err)
 
-	// Create initial commit in remote
-	remoteW, err := remote.Worktree()
+	_, err = localRepo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{remotePath},
+	})
+	assert.NoError(t, err)
+}
+
+func setupRemoteRepo(t *testing.T) string {
+	path := t.TempDir()
+	_, err := git.PlainInit(path, true)
 	assert.NoError(t, err)
 
-	// Create a test file and commit it
-	err = os.WriteFile(filepath.Join(remotePath, "test.txt"), []byte("initial"), 0644)
+	_, err = git.PlainOpen(path)
 	assert.NoError(t, err)
 
-	_, err = remoteW.Add("test.txt")
+	return path
+}
+
+func setupLocalRepo(t *testing.T) (string, *git.Repository) {
+	path := t.TempDir()
+	repo, err := git.PlainInit(path, false)
 	assert.NoError(t, err)
 
-	_, err = remoteW.Commit("Initial commit", &git.CommitOptions{
+	_, err = git.PlainOpen(path)
+	assert.NoError(t, err)
+
+	return path, repo
+}
+
+func createUncommittedChange(t *testing.T, localPath string, fileName string) {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	err := os.WriteFile(filepath.Join(localPath, fileName), b, 0644)
+	assert.NoError(t, err)
+}
+
+func createCommit(t *testing.T, localPath string, fileName string) plumbing.Hash {
+	createUncommittedChange(t, localPath, fileName)
+
+	local, err := git.PlainOpen(localPath)
+	assert.NoError(t, err)
+
+	w, err := local.Worktree()
+	assert.NoError(t, err)
+
+	_, err = w.Add(fileName)
+	assert.NoError(t, err)
+
+	hash, err := w.Commit("commit", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@example.com",
@@ -42,175 +78,214 @@ func setupTestRepos(t *testing.T) (string, string) {
 	})
 	assert.NoError(t, err)
 
-	// Clone remote to create local repo
-	_, err = git.PlainClone(localPath, false, &git.CloneOptions{
+	return hash
+}
+
+// Empty Local Repo
+func TestGitSync_EmptyLocalEmptyRemoteNoUncommitted(t *testing.T) {
+	localPath, localRepo := setupLocalRepo(t)
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	// Try to sync (should be no-op)
+	err := GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	// Verify still no commits
+	_, err = localRepo.Head()
+	assert.Error(t, err)
+}
+
+func TestGitSync_EmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	emptyLocalPath, emptyLocalRepo := setupLocalRepo(t)
+	addRemoteRepo(t, emptyLocalPath, remotePath)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	remoteHash := createCommit(t, localPath, "test.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	err = GitSync(emptyLocalPath, "test commit")
+	assert.NoError(t, err)
+
+	head, err := emptyLocalRepo.Head()
+	assert.NoError(t, err)
+	assert.Equal(t, remoteHash, head.Hash())
+}
+
+func TestGitSync_EmptyLocalEmptyRemoteUncommitted(t *testing.T) {
+	localPath, localRepo := setupLocalRepo(t)
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	createUncommittedChange(t, localPath, "test.txt")
+
+	// Verify we have uncommitted changes
+	w, err := localRepo.Worktree()
+	assert.NoError(t, err)
+	status, err := w.Status()
+	assert.NoError(t, err)
+	assert.False(t, status.IsClean())
+
+	// Sync
+	err = GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	// Verify the changes were committed
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+
+	commit, err := localRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	assert.Equal(t, "test commit", commit.Message)
+
+	// Verify the working directory is now clean
+	status, err = w.Status()
+	assert.NoError(t, err)
+	assert.True(t, status.IsClean())
+
+	// TODO: Test that the remote repo is updated
+}
+
+func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	emptyLocalPath, emptyLocalRepo := setupLocalRepo(t)
+	addRemoteRepo(t, emptyLocalPath, remotePath)
+	createUncommittedChange(t, emptyLocalPath, "test.txt")
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	remoteHash := createCommit(t, localPath, "remote.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	err = GitSync(emptyLocalPath, "test commit")
+	assert.NoError(t, err)
+
+	// Verify HEAD points to our new commit
+	head, err := emptyLocalRepo.Head()
+	assert.NoError(t, err)
+
+	headCommit, err := emptyLocalRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+
+	// Should have 1 parent (the remote commit)
+	assert.Equal(t, 1, len(headCommit.ParentHashes))
+	assert.Equal(t, remoteHash, headCommit.ParentHashes[0])
+
+	// Verify both files exist
+	_, err = os.Stat(filepath.Join(emptyLocalPath, "test.txt"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(emptyLocalPath, "remote.txt"))
+	assert.NoError(t, err)
+
+	// Verify working directory is clean
+	w, err := emptyLocalRepo.Worktree()
+	assert.NoError(t, err)
+	status, err := w.Status()
+	assert.NoError(t, err)
+	assert.True(t, status.IsClean())
+}
+
+func TestGitSync_BothReposInSyncWithSameCommit(t *testing.T) {
+	localPath, localRepo := setupLocalRepo(t)
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	hash := createCommit(t, localPath, "test.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	// Store the hash before sync
+	beforeHash := hash
+
+	// Run GitSync
+	err = GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	// Verify HEAD is still at the same commit
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+	assert.Equal(t, beforeHash, head.Hash())
+}
+
+func TestGitSync_LocalRepoAheadOfNonEmptyRemote(t *testing.T) {
+	localPath, localRepo := setupLocalRepo(t)
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	initialHash := createCommit(t, localPath, "test.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	newHash := createCommit(t, localPath, "test2.txt")
+
+	// Run GitSync
+	err = GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	// Verify HEAD is still at our new commit
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+	assert.Equal(t, newHash, head.Hash())
+
+	// Verify the initial commit is an ancestor of our new HEAD
+	initialCommit, err := localRepo.CommitObject(initialHash)
+	assert.NoError(t, err)
+	headCommit, err := localRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	isAncestor, err := initialCommit.IsAncestor(headCommit)
+	assert.NoError(t, err)
+	assert.True(t, isAncestor)
+}
+
+func TestGitSync_NonEmptyLocalBehindNonEmptyRemote(t *testing.T) {
+	localPath, localRepo := setupLocalRepo(t)
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	initialHash := createCommit(t, localPath, "test.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	clonedPath := t.TempDir()
+	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{
 		URL: remotePath,
 	})
 	assert.NoError(t, err)
 
-	return localPath, remotePath
-}
-
-// Helper to create a new commit in a repository
-func createCommit(t *testing.T, repoPath, filename, content, message string) {
-	r, err := git.PlainOpen(repoPath)
+	remoteHash := createCommit(t, clonedPath, "remote.txt")
+	err = cloned.Push(&git.PushOptions{})
 	assert.NoError(t, err)
 
-	w, err := r.Worktree()
+	// Run GitSync
+	err = GitSync(localPath, "test commit")
 	assert.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(repoPath, filename), []byte(content), 0644)
+	// Verify local HEAD is now at remote's commit
+	head, err := localRepo.Head()
 	assert.NoError(t, err)
+	assert.Equal(t, remoteHash, head.Hash())
 
-	_, err = w.Add(filename)
+	// Verify initial commit is an ancestor of our new HEAD
+	initialCommit, err := localRepo.CommitObject(initialHash)
 	assert.NoError(t, err)
-
-	_, err = w.Commit(message, &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@example.com",
-			When:  time.Now(),
-		},
-	})
+	headCommit, err := localRepo.CommitObject(head.Hash())
 	assert.NoError(t, err)
-}
-
-func TestGitSync_CleanState(t *testing.T) {
-	localPath, _ := setupTestRepos(t)
-
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("path", localPath, "")
-	cmd.PersistentFlags().String("msg", "test sync", "")
-
-	err := execute(cmd, nil)
+	isAncestor, err := initialCommit.IsAncestor(headCommit)
 	assert.NoError(t, err)
+	assert.True(t, isAncestor)
 
-	// Verify no new commits were created
-	r, err := git.PlainOpen(localPath)
+	// Verify we have both files
+	_, err = os.Stat(filepath.Join(localPath, "test.txt"))
 	assert.NoError(t, err)
-
-	head, err := r.Head()
-	assert.NoError(t, err)
-
-	commits := 0
-	iter, err := r.Log(&git.LogOptions{From: head.Hash()})
-	assert.NoError(t, err)
-
-	err = iter.ForEach(func(c *object.Commit) error {
-		commits++
-		return nil
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, 1, commits, "Should only have initial commit")
-}
-
-func TestGitSync_FastForward(t *testing.T) {
-	localPath, remotePath := setupTestRepos(t)
-
-	// Create a new commit in remote
-	createCommit(t, remotePath, "remote.txt", "remote change", "Remote commit")
-
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("path", localPath, "")
-	cmd.PersistentFlags().String("msg", "test sync", "")
-
-	err := execute(cmd, nil)
-	assert.NoError(t, err)
-
-	// Verify local has fast-forwarded
-	r, err := git.PlainOpen(localPath)
-	assert.NoError(t, err)
-
-	head, err := r.Head()
-	assert.NoError(t, err)
-
-	// Verify content of new file exists
-	content, err := os.ReadFile(filepath.Join(localPath, "remote.txt"))
-	assert.NoError(t, err)
-	assert.Equal(t, "remote change", string(content))
-
-	// Verify no merge commits were created
-	commits := 0
-	iter, err := r.Log(&git.LogOptions{From: head.Hash()})
-	assert.NoError(t, err)
-
-	err = iter.ForEach(func(c *object.Commit) error {
-		commits++
-		if commits > 1 {
-			assert.Equal(t, 1, len(c.ParentHashes), "Should not have any merge commits")
-		}
-		return nil
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, 2, commits, "Should have initial + remote commit")
-}
-
-func TestGitSync_LocalChanges(t *testing.T) {
-	localPath, _ := setupTestRepos(t)
-
-	// Create a local change
-	err := os.WriteFile(filepath.Join(localPath, "local.txt"), []byte("local change"), 0644)
-	assert.NoError(t, err)
-
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("path", localPath, "")
-	cmd.PersistentFlags().String("msg", "test sync", "")
-
-	err = execute(cmd, nil)
-	assert.NoError(t, err)
-
-	// Verify commit was created and pushed
-	r, err := git.PlainOpen(localPath)
-	assert.NoError(t, err)
-
-	head, err := r.Head()
-	assert.NoError(t, err)
-
-	commit, err := r.CommitObject(head.Hash())
-	assert.NoError(t, err)
-	assert.Equal(t, "test sync", commit.Message)
-
-	// Verify file exists in commit
-	tree, err := commit.Tree()
-	assert.NoError(t, err)
-	_, err = tree.File("local.txt")
-	assert.NoError(t, err)
-}
-
-func TestGitSync_MergeRequired(t *testing.T) {
-	localPath, remotePath := setupTestRepos(t)
-
-	// Create a remote change
-	createCommit(t, remotePath, "remote.txt", "remote change", "Remote commit")
-
-	// Create a local change
-	err := os.WriteFile(filepath.Join(localPath, "local.txt"), []byte("local change"), 0644)
-	assert.NoError(t, err)
-
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("path", localPath, "")
-	cmd.PersistentFlags().String("msg", "test sync", "")
-
-	err = execute(cmd, nil)
-	assert.NoError(t, err)
-
-	// Verify merge commit was created
-	r, err := git.PlainOpen(localPath)
-	assert.NoError(t, err)
-
-	head, err := r.Head()
-	assert.NoError(t, err)
-
-	commit, err := r.CommitObject(head.Hash())
-	assert.NoError(t, err)
-	assert.Contains(t, commit.Message, "Merge")
-	assert.Len(t, commit.ParentHashes, 2, "Should be a merge commit with 2 parents")
-
-	// Verify both files exist
-	tree, err := commit.Tree()
-	assert.NoError(t, err)
-	_, err = tree.File("local.txt")
-	assert.NoError(t, err)
-	_, err = tree.File("remote.txt")
+	_, err = os.Stat(filepath.Join(localPath, "remote.txt"))
 	assert.NoError(t, err)
 }
