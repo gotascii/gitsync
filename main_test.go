@@ -251,8 +251,9 @@ func TestGitSync_NonEmptyLocalEmptyRemoteUncommitted(t *testing.T) {
 }
 
 func TestGitSync_NonEmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
-	localPath, localRepo := setupLocalRepo(t)
 	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
 	addRemoteRepo(t, localPath, remotePath)
 	hash := createCommit(t, localPath, "test.txt")
 
@@ -273,36 +274,59 @@ func TestGitSync_NonEmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
 }
 
 func TestGitSync_NonEmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
-}
-
-func TestGitSync_LocalRepoAheadOfNonEmptyRemote(t *testing.T) {
 	localPath, localRepo := setupLocalRepo(t)
 	remotePath := setupRemoteRepo(t)
 	addRemoteRepo(t, localPath, remotePath)
-	initialHash := createCommit(t, localPath, "test.txt")
 
+	// Create and push initial commit
+	initialHash := createCommit(t, localPath, "test.txt")
 	err := localRepo.Push(&git.PushOptions{})
 	assert.NoError(t, err)
 
-	newHash := createCommit(t, localPath, "test2.txt")
+	// Create an uncommitted change
+	createUncommittedChange(t, localPath, "test2.txt")
+
+	// Verify we have uncommitted changes
+	w, err := localRepo.Worktree()
+	assert.NoError(t, err)
+	status, err := w.Status()
+	assert.NoError(t, err)
+	assert.False(t, status.IsClean())
 
 	// Run GitSync
 	err = GitSync(localPath, "test commit")
 	assert.NoError(t, err)
 
-	// Verify HEAD is still at our new commit
+	// Get the new HEAD commit
 	head, err := localRepo.Head()
 	assert.NoError(t, err)
-	assert.Equal(t, newHash, head.Hash())
 
-	// Verify the initial commit is an ancestor of our new HEAD
-	initialCommit, err := localRepo.CommitObject(initialHash)
-	assert.NoError(t, err)
+	// Verify the new commit details
 	headCommit, err := localRepo.CommitObject(head.Hash())
 	assert.NoError(t, err)
-	isAncestor, err := initialCommit.IsAncestor(headCommit)
+	assert.Equal(t, "test commit", headCommit.Message)
+
+	// Verify the parent is our initial commit
+	assert.Equal(t, 1, len(headCommit.ParentHashes))
+	assert.Equal(t, initialHash, headCommit.ParentHashes[0])
+
+	// Verify both files exist and are tracked
+	status, err = w.Status()
 	assert.NoError(t, err)
-	assert.True(t, isAncestor)
+	assert.True(t, status.IsClean())
+
+	// Both files should exist on disk
+	_, err = os.Stat(filepath.Join(localPath, "test.txt"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(localPath, "test2.txt"))
+	assert.NoError(t, err)
+
+	// Verify the changes made it to the remote
+	remoteRepo, err := git.PlainOpen(remotePath)
+	assert.NoError(t, err)
+	remoteHead, err := remoteRepo.Reference("refs/heads/master", true)
+	assert.NoError(t, err)
+	assert.Equal(t, head.Hash(), remoteHead.Hash())
 }
 
 func TestGitSync_NonEmptyLocalBehindNonEmptyRemote(t *testing.T) {

@@ -175,6 +175,10 @@ func GitSync(repoPath string, commitMsg string) error {
 		return fmt.Errorf("failed to commit uncommitted changes: %v", err)
 	}
 
+	if err := r.Reload(); err != nil {
+		return fmt.Errorf("failed to reload repo: %v", err)
+	}
+
 	if r.PushSyncNeeded() {
 		logWithID(syncID, "Pushing to remote...")
 		if err := pushToRemote(localRepo); err != nil {

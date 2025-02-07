@@ -21,21 +21,8 @@ type Repo struct {
 
 func NewRepo(repo *git.Repository) (*Repo, error) {
 	r := &Repo{repo: repo}
-
-	if err := r.populateLocalHeadRef(); err != nil {
-		return nil, fmt.Errorf("populating local HEAD ref: %v", err)
-	}
-	if err := r.populateLocalHeadRefName(); err != nil {
-		return nil, fmt.Errorf("populating local HEAD ref name: %v", err)
-	}
-	if err := r.populateRemoteHeadRef(); err != nil {
-		return nil, fmt.Errorf("populating remote HEAD ref: %v", err)
-	}
-	if err := r.populateCommits(); err != nil {
-		return nil, fmt.Errorf("populating commits: %v", err)
-	}
-	if err := r.populateAncestory(); err != nil {
-		return nil, fmt.Errorf("populating ancestory: %v", err)
+	if err := r.Reload(); err != nil {
+		return nil, fmt.Errorf("error creating repo: %v", err)
 	}
 
 	return r, nil
@@ -113,6 +100,26 @@ func (r *Repo) populateAncestory() error {
 		return fmt.Errorf("failed to check ancestry: %v", err)
 	}
 	r.isRemoteAncestorOfLocal = isRemoteAncestorOfLocal
+
+	return nil
+}
+
+func (r *Repo) Reload() error {
+	if err := r.populateLocalHeadRef(); err != nil {
+		return fmt.Errorf("populating local HEAD ref: %v", err)
+	}
+	if err := r.populateLocalHeadRefName(); err != nil {
+		return fmt.Errorf("populating local HEAD ref name: %v", err)
+	}
+	if err := r.populateRemoteHeadRef(); err != nil {
+		return fmt.Errorf("populating remote HEAD ref: %v", err)
+	}
+	if err := r.populateCommits(); err != nil {
+		return fmt.Errorf("populating commits: %v", err)
+	}
+	if err := r.populateAncestory(); err != nil {
+		return fmt.Errorf("populating ancestory: %v", err)
+	}
 
 	return nil
 }
