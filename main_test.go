@@ -96,28 +96,6 @@ func TestGitSync_EmptyLocalEmptyRemoteNoUncommitted(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGitSync_EmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
-	remotePath := setupRemoteRepo(t)
-
-	emptyLocalPath, emptyLocalRepo := setupLocalRepo(t)
-	addRemoteRepo(t, emptyLocalPath, remotePath)
-
-	localPath, localRepo := setupLocalRepo(t)
-	addRemoteRepo(t, localPath, remotePath)
-
-	remoteHash := createCommit(t, localPath, "test.txt")
-
-	err := localRepo.Push(&git.PushOptions{})
-	assert.NoError(t, err)
-
-	err = GitSync(emptyLocalPath, "test commit")
-	assert.NoError(t, err)
-
-	head, err := emptyLocalRepo.Head()
-	assert.NoError(t, err)
-	assert.Equal(t, remoteHash, head.Hash())
-}
-
 func TestGitSync_EmptyLocalEmptyRemoteUncommitted(t *testing.T) {
 	localPath, localRepo := setupLocalRepo(t)
 	remotePath := setupRemoteRepo(t)
@@ -149,6 +127,28 @@ func TestGitSync_EmptyLocalEmptyRemoteUncommitted(t *testing.T) {
 	assert.True(t, status.IsClean())
 
 	// TODO: Test that the remote repo is updated
+}
+
+func TestGitSync_EmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	emptyLocalPath, emptyLocalRepo := setupLocalRepo(t)
+	addRemoteRepo(t, emptyLocalPath, remotePath)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	remoteHash := createCommit(t, localPath, "test.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	assert.NoError(t, err)
+
+	err = GitSync(emptyLocalPath, "test commit")
+	assert.NoError(t, err)
+
+	head, err := emptyLocalRepo.Head()
+	assert.NoError(t, err)
+	assert.Equal(t, remoteHash, head.Hash())
 }
 
 func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
@@ -194,7 +194,63 @@ func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	assert.True(t, status.IsClean())
 }
 
-func TestGitSync_BothReposInSyncWithSameCommit(t *testing.T) {
+func TestGitSync_NonEmptyLocalEmptyRemoteNoUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	initialHash := createCommit(t, localPath, "test.txt")
+
+	err := GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+	assert.Equal(t, initialHash, head.Hash())
+}
+
+func TestGitSync_NonEmptyLocalEmptyRemoteUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	initialHash := createCommit(t, localPath, "test.txt")
+	createUncommittedChange(t, localPath, "test2.txt")
+
+	err := GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	// Get the new HEAD commit
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+
+	// Verify the new commit details
+	headCommit, err := localRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	assert.Equal(t, "test commit", headCommit.Message)
+
+	// Verify the parent is our initial commit
+	assert.Equal(t, 1, len(headCommit.ParentHashes))
+	assert.Equal(t, initialHash, headCommit.ParentHashes[0])
+
+	// Verify both files exist and are tracked
+	w, err := localRepo.Worktree()
+	assert.NoError(t, err)
+
+	status, err := w.Status()
+	assert.NoError(t, err)
+
+	// Working directory should be clean
+	assert.True(t, status.IsClean())
+
+	// Both files should exist on disk
+	_, err = os.Stat(filepath.Join(localPath, "test.txt"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(localPath, "test2.txt"))
+	assert.NoError(t, err)
+}
+
+func TestGitSync_NonEmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
 	localPath, localRepo := setupLocalRepo(t)
 	remotePath := setupRemoteRepo(t)
 	addRemoteRepo(t, localPath, remotePath)
@@ -214,6 +270,9 @@ func TestGitSync_BothReposInSyncWithSameCommit(t *testing.T) {
 	head, err := localRepo.Head()
 	assert.NoError(t, err)
 	assert.Equal(t, beforeHash, head.Hash())
+}
+
+func TestGitSync_NonEmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 }
 
 func TestGitSync_LocalRepoAheadOfNonEmptyRemote(t *testing.T) {
@@ -247,8 +306,9 @@ func TestGitSync_LocalRepoAheadOfNonEmptyRemote(t *testing.T) {
 }
 
 func TestGitSync_NonEmptyLocalBehindNonEmptyRemote(t *testing.T) {
-	localPath, localRepo := setupLocalRepo(t)
 	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
 	addRemoteRepo(t, localPath, remotePath)
 	initialHash := createCommit(t, localPath, "test.txt")
 
