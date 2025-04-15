@@ -10,6 +10,7 @@ GitSync is a command-line tool that automates Git repository synchronization, ha
 - 🔍 Detailed logging with unique sync IDs
 - 🚫 Merge conflict detection (prevents automatic merges that would create conflicts)
 - 🔁 Push/pull synchronization based on commit history
+- 🔑 Flexible SSH authentication support
 
 ## Installation
 
@@ -31,6 +32,24 @@ Available flags:
 
 - `--path` - Path to the Git repository (default: ".")
 - `--msg` - Commit message for any uncommitted changes (default: "Syncing")
+
+## Authentication
+
+GitSync supports multiple SSH authentication methods:
+
+1. **System SSH Agent (Default)**:
+   - Uses your system's SSH agent and default keys
+   - No additional configuration needed
+
+2. **Custom SSH Key**:
+   - Set the `GIT_SSH_COMMAND` environment variable to specify a custom key:
+
+   ```bash
+   export GIT_SSH_COMMAND="ssh -i /path/to/your/private_key"
+   gitsync
+   ```
+
+   - Useful for CI/CD environments or when using specific deploy keys
 
 ## How It Works
 
@@ -59,6 +78,12 @@ Sync specific repository with custom commit message:
 gitsync --path /path/to/repo --msg "Syncing project files"
 ```
 
+Sync using a specific SSH key:
+
+```bash
+GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" gitsync
+```
+
 ## Error Handling
 
 GitSync will exit with status code 1 and display an error message when:
@@ -67,6 +92,7 @@ GitSync will exit with status code 1 and display an error message when:
 - Remote repository is not accessible
 - Git operations fail
 - Repository path is invalid
+- SSH authentication fails
 
 ## License
 
