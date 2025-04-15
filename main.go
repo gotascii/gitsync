@@ -1,68 +1,17 @@
-// my thinking is to change up the flow (quite a bit...) and to approach it like this:
-// if there are local uncommitted changes, commit them
-// then, store the local head ref (which may be unchanged cuz there were no local uncommited changes)
-// then, try to fetch from the remote
-// then, store the remote head ref (which could be nil cuz the remote is empty)
-// then compare the refs
-// if they are the same there's nothing to do, exit
-// if the local branch is ahead of the remote, push that up and exit
-// otherwise, if the remote is ahead of local, do a fast forward and exit
-// otherwise, do a proper merge
-// does that makes sense?
-
 package main
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
-
-// Helper function to generate a sync run ID
-func generateSyncID() string {
-	return uuid.New().String()[:8]
-}
-
-func logWithID(syncID string, format string, a ...interface{}) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	message := fmt.Sprintf(format, a...)
-	fmt.Printf("[%s][%s] %s\n", syncID, timestamp, message)
-}
-
-// Helper function to find the case-only renamed file
-func findCaseOnlyRename(deletedFile string, status git.Status) bool {
-	for otherFile, otherStat := range status {
-		if strings.EqualFold(deletedFile, otherFile) && deletedFile != otherFile && otherStat.Worktree == git.Untracked {
-			return true
-		}
-	}
-	return false
-}
-
-// handleCaseRenames processes case-sensitive file renames
-func handleCaseRenames(w *git.Worktree, status git.Status, syncID string) error {
-	for file, stat := range status {
-		if stat.Worktree == git.Deleted {
-			if findCaseOnlyRename(file, status) {
-				logWithID(syncID, "Handling case-sensitive rename for %s", file)
-				_, err := w.Remove(file)
-				if err != nil {
-					return fmt.Errorf("failed to remove file: %v", err)
-				}
-			}
-		}
-	}
-	return nil
-}
 
 func commitChanges(syncID string, localRepo *git.Repository, commitMsg string) error {
 	// localWorktree is required to get Status
@@ -112,9 +61,10 @@ func commitChanges(syncID string, localRepo *git.Repository, commitMsg string) e
 	return nil
 }
 
-func pushToRemote(repo *git.Repository) error {
+func pushToRemote(repo *git.Repository, auth transport.AuthMethod) error {
 	err := repo.Push(&git.PushOptions{
 		RemoteName: "origin",
+		Auth:       auth,
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("failed to push to remote: %v", err)
@@ -127,6 +77,13 @@ func GitSync(repoPath string, commitMsg string) error {
 	syncID := generateSyncID()
 	logWithID(syncID, "GitSyncing")
 
+	// Get SSH auth method if available
+	auth, err := getAuthMethod()
+	if err != nil {
+		logWithID(syncID, "Warning: Failed to setup SSH auth: %v", err)
+		// Continue without auth, will use default SSH agent
+	}
+
 	localRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open repo: %v", err)
@@ -137,6 +94,7 @@ func GitSync(repoPath string, commitMsg string) error {
 		RemoteName: "origin",
 		Progress:   os.Stdout,
 		Force:      true,
+		Auth:       auth,
 		RefSpecs: []config.RefSpec{
 			config.RefSpec("+refs/heads/*:refs/remotes/origin/*"),
 		},
@@ -181,7 +139,7 @@ func GitSync(repoPath string, commitMsg string) error {
 
 	if r.PushSyncNeeded() {
 		logWithID(syncID, "Pushing to remote...")
-		if err := pushToRemote(localRepo); err != nil {
+		if err := pushToRemote(localRepo, auth); err != nil {
 			return fmt.Errorf("failed to push: %v", err)
 		}
 		logWithID(syncID, "Push complete")
