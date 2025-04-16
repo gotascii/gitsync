@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func addRemoteRepo(t *testing.T, localPath string, remotePath string) {
@@ -154,7 +155,7 @@ func TestGitSync_EmptyLocalNonEmptyRemoteNoUncommitted(t *testing.T) {
 func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	remotePath := setupRemoteRepo(t)
 
-	emptyLocalPath, emptyLocalRepo := setupLocalRepo(t)
+	emptyLocalPath, _ := setupLocalRepo(t)
 	addRemoteRepo(t, emptyLocalPath, remotePath)
 	createUncommittedChange(t, emptyLocalPath, "test.txt")
 
@@ -169,11 +170,15 @@ func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	err = GitSync(emptyLocalPath, "test commit")
 	assert.NoError(t, err)
 
-	// Verify HEAD points to our new commit
-	head, err := emptyLocalRepo.Head()
+	// Re-open the repo to get the latest state
+	repo, err := git.PlainOpen(emptyLocalPath)
 	assert.NoError(t, err)
 
-	headCommit, err := emptyLocalRepo.CommitObject(head.Hash())
+	// Use 'repo' for all subsequent checks
+	head, err := repo.Head()
+	assert.NoError(t, err)
+
+	headCommit, err := repo.CommitObject(head.Hash())
 	assert.NoError(t, err)
 
 	// Should have 1 parent (the remote commit)
@@ -187,7 +192,7 @@ func TestGitSync_EmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify working directory is clean
-	w, err := emptyLocalRepo.Worktree()
+	w, err := repo.Worktree()
 	assert.NoError(t, err)
 	status, err := w.Status()
 	assert.NoError(t, err)
@@ -279,12 +284,13 @@ func TestGitSync_NonEmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	addRemoteRepo(t, localPath, remotePath)
 
 	// Create and push initial commit
-	initialHash := createCommit(t, localPath, "test.txt")
-	err := localRepo.Push(&git.PushOptions{})
-	assert.NoError(t, err)
+	initialHash := createCommit(t, localPath, "initial.txt")
+	var err error
+	err = localRepo.Push(&git.PushOptions{})
+	require.NoError(t, err)
 
 	// Create an uncommitted change
-	createUncommittedChange(t, localPath, "test2.txt")
+	createUncommittedChange(t, localPath, "test.txt")
 
 	// Verify we have uncommitted changes
 	w, err := localRepo.Worktree()
@@ -316,9 +322,9 @@ func TestGitSync_NonEmptyLocalNonEmptyRemoteUncommitted(t *testing.T) {
 	assert.True(t, status.IsClean())
 
 	// Both files should exist on disk
-	_, err = os.Stat(filepath.Join(localPath, "test.txt"))
+	_, err = os.Stat(filepath.Join(localPath, "initial.txt"))
 	assert.NoError(t, err)
-	_, err = os.Stat(filepath.Join(localPath, "test2.txt"))
+	_, err = os.Stat(filepath.Join(localPath, "test.txt"))
 	assert.NoError(t, err)
 
 	// Verify the changes made it to the remote
@@ -372,4 +378,128 @@ func TestGitSync_NonEmptyLocalBehindNonEmptyRemote(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Stat(filepath.Join(localPath, "remote.txt"))
 	assert.NoError(t, err)
+}
+
+// TestGoGit_FastForwardDropsUncommitted verifies that go-git's fast-forward implementation
+// drops uncommitted files. This is why we use Git CLI in main.go instead of go-git's
+// native functionality for fast-forward operations.
+func TestGoGit_FastForwardDropsUncommitted(t *testing.T) {
+	// Create local repo
+	localPath, localRepo := setupLocalRepo(t)
+
+	// Create remote repo and add it as remote
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	// Create and push initial commit
+	_ = createCommit(t, localPath, "initial.txt")
+	var err error
+	err = localRepo.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	// Clone remote repo to simulate another user
+	clonedPath := t.TempDir()
+	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{
+		URL: remotePath,
+	})
+	require.NoError(t, err)
+
+	// Create a commit in the cloned repo and push it
+	_ = createCommit(t, clonedPath, "remote.txt")
+	err = cloned.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	// Create an uncommitted file in local repo
+	createUncommittedChange(t, localPath, "uncommitted.txt")
+
+	// Verify uncommitted file exists before fast-forward
+	uncommittedPath := filepath.Join(localPath, "uncommitted.txt")
+	require.FileExists(t, uncommittedPath)
+
+	// Fetch remote changes
+	err = localRepo.Fetch(&git.FetchOptions{})
+	require.NoError(t, err)
+
+	// Attempt fast-forward merge using go-git
+	w, err := localRepo.Worktree()
+	require.NoError(t, err)
+
+	// Get remote master reference
+	remoteMaster, err := localRepo.Reference("refs/remotes/origin/master", true)
+	require.NoError(t, err)
+
+	err = w.Reset(&git.ResetOptions{
+		Commit: remoteMaster.Hash(),
+		Mode:   git.MergeReset,
+	})
+	require.NoError(t, err)
+
+	// Verify that go-git dropped the uncommitted file during fast-forward
+	require.NoFileExists(t, uncommittedPath)
+}
+
+func TestGoGit_FastForwardMergeDropsUncommitted(t *testing.T) {
+	// Create local repo
+	localPath, localRepo := setupLocalRepo(t)
+
+	// Create remote repo and add it as remote
+	remotePath := setupRemoteRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+
+	// Create and push initial commit
+	_ = createCommit(t, localPath, "initial.txt")
+	var err error
+	err = localRepo.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	// Clone remote repo to simulate another user
+	clonedPath := t.TempDir()
+	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{
+		URL: remotePath,
+	})
+	require.NoError(t, err)
+
+	// Create a commit in the cloned repo and push it
+	_ = createCommit(t, clonedPath, "remote.txt")
+	err = cloned.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	// Create an uncommitted file in local repo
+	createUncommittedChange(t, localPath, "uncommitted.txt")
+
+	// Verify uncommitted file exists before fast-forward
+	uncommittedPath := filepath.Join(localPath, "uncommitted.txt")
+	require.FileExists(t, uncommittedPath)
+
+	// Fetch remote changes
+	err = localRepo.Fetch(&git.FetchOptions{})
+	require.NoError(t, err)
+
+	// Get remote master reference
+	remoteMaster, err := localRepo.Reference("refs/remotes/origin/master", true)
+	require.NoError(t, err)
+
+	// Attempt fast-forward using go-git's Merge
+	err = localRepo.Merge(*remoteMaster, git.MergeOptions{})
+	require.NoError(t, err)
+
+	// Verify the uncommitted file still exists
+	require.FileExists(t, uncommittedPath)
+
+	// Check if the file is tracked/committed
+	w, err := localRepo.Worktree()
+	require.NoError(t, err)
+	status, err := w.Status()
+	require.NoError(t, err)
+
+	// Check the status of our uncommitted file
+	fileStatus := status.File("uncommitted.txt")
+	t.Logf("File status: %+v", fileStatus)
+
+	// Get HEAD commit to see what was actually committed
+	head, err := localRepo.Head()
+	require.NoError(t, err)
+	headCommit, err := localRepo.CommitObject(head.Hash())
+	require.NoError(t, err)
+	t.Logf("HEAD commit message: %s", headCommit.Message)
 }

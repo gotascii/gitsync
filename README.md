@@ -97,3 +97,34 @@ GitSync will exit with status code 1 and display an error message when:
 ## License
 
 [License Type] - See LICENSE file for details
+
+## go-git Merge Issues
+
+If we try to use `repo.Merge`:
+
+``` go
+err = localRepo.Merge(*r.RemoteHeadRef, git.MergeOptions{})
+if err != nil {
+   return fmt.Errorf("failed to merge: %v", err)
+}
+```
+
+Then `TestGitSync_NonEmptyLocalBehindNonEmptyRemote` fails!
+The merge completes with the local index containing a deletion of remote.txt
+VERIFIED: The git CLI does _not_ behave this way
+
+If we try to use `worktree.Reset` with `MergeReset` mode:
+
+``` go
+err = localWorktree.Reset(&git.ResetOptions{
+   Commit: r.RemoteHeadRef.Hash(),
+   Mode:   git.MergeReset,
+})
+if err != nil {
+   return fmt.Errorf("failed to soft reset: %v", err)
+}
+```
+
+Then `TestGitSync_EmptyLocalNonEmptyRemoteUncommitted` fails!
+
+A local HEAD ref is required to prevent a nil error, which then introduces the need for some sort of stash. In this particular case, I believe any sort of reset would require stash-like operations. Note, we tried using the remote HEAD ref but that results in the same scenario as the "merge" above: remote.txt is marked for deletion.

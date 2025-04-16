@@ -112,16 +112,19 @@ func GitSync(repoPath string, commitMsg string) error {
 	if r.CommitsSynced() {
 		logWithID(syncID, "No unsynced commits")
 	} else if r.FastForwardSyncNeeded() {
-		// Fast-forward using git CLI because go-git drops uncommited new files!
 		logWithID(syncID, "Fast-forwarding to remote changes...")
 
-		// Get the remote branch name
-		remoteBranch := "origin/" + r.LocalHeadRefName
-
-		// Attempt fast-forward merge
-		cmd := exec.Command("git", "-C", repoPath, "merge", "--ff-only", remoteBranch)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to fast-forward: %s: %v", string(out), err)
+		if os.Getenv("DEBUG_MERGE") != "" {
+			err := debugMerge(syncID, repoPath, localRepo, r)
+			if err != nil {
+				return fmt.Errorf("failed to merge: %v", err)
+			}
+		} else {
+			remoteBranch := "origin/" + r.LocalHeadRefName
+			cmd := exec.Command("git", "-C", repoPath, "merge", "--ff-only", remoteBranch)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("failed to fast-forward: %s: %v", string(out), err)
+			}
 		}
 
 		logWithID(syncID, "Fast-forward complete")
@@ -131,6 +134,10 @@ func GitSync(repoPath string, commitMsg string) error {
 
 	if err := commitChanges(syncID, localRepo, commitMsg); err != nil {
 		return fmt.Errorf("failed to commit uncommitted changes: %v", err)
+	}
+
+	if err := debugPause(syncID, "after commitChanges: %s", repoPath); err != nil {
+		return fmt.Errorf("debug pause failed: %v", err)
 	}
 
 	if err := r.Reload(); err != nil {
