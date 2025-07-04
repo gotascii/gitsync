@@ -20,9 +20,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 	}
 	// 1. If no local branch, create it and set HEAD
 	if r.LocalHeadRef == nil {
-		if err := debugPause(syncID, "before creating branch: %s", repoPath); err != nil {
-			return fmt.Errorf("debug pause failed: %v", err)
-		}
 		branchRef := plumbing.NewBranchReferenceName(r.LocalHeadRefName)
 		err := localRepo.Storer.SetReference(plumbing.NewHashReference(branchRef, r.RemoteHeadRef.Hash()))
 		if err != nil {
@@ -35,9 +32,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 		debugLogWithID(syncID, "Created local branch and set HEAD: %s", branchRef)
 	}
 
-	if err := debugPause(syncID, "before Reset: %s", repoPath); err != nil {
-		return fmt.Errorf("debug pause failed: %v", err)
-	}
 
 	// 2. Some sort of ff-merge-like event
 	debugLogWithID(syncID, "Doing a ff merge")
@@ -55,9 +49,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 	// 	return fmt.Errorf("failed to soft reset: %v", err)
 	// }
 
-	if err := debugPause(syncID, "after reset: %s", repoPath); err != nil {
-		return fmt.Errorf("debug pause failed: %v", err)
-	}
 
 	// THIS IS A TERRIBLE IDEA
 	// 3. Manually check out all files from the remote commit
@@ -111,9 +102,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 		return fmt.Errorf("failed to AddGlob files after checkout: %v", err)
 	}
 
-	if err := debugPause(syncID, "after AddGlob: %s", repoPath); err != nil {
-		return fmt.Errorf("debug pause failed: %v", err)
-	}
 	debugLogWithID(syncID, "Files staged after fast-forward")
 
 	return nil

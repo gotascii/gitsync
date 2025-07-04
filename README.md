@@ -84,6 +84,23 @@ Sync using a specific SSH key:
 GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" gitsync
 ```
 
+## Debugging
+
+GitSync includes support for debugging with Delve at key sync points. Use the provided debug script to automatically set breakpoints:
+
+```bash
+dlv debug . --init debug.dlv -- [your-args]
+```
+
+This will pause execution at:
+- After committing local changes
+- Before creating a branch (experimental merge mode)
+- Before performing reset operations (experimental merge mode)
+- After reset operations (experimental merge mode)
+- After staging files (experimental merge mode)
+
+When paused, you can inspect the repository state in a separate terminal using standard Git commands (`git status`, `git log`, etc.), then continue execution with `(dlv) continue`.
+
 ## Error Handling
 
 GitSync will exit with status code 1 and display an error message when:

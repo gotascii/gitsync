@@ -136,9 +136,6 @@ func GitSync(repoPath string, commitMsg string) error {
 		return fmt.Errorf("failed to commit uncommitted changes: %v", err)
 	}
 
-	if err := debugPause(syncID, "after commitChanges: %s", repoPath); err != nil {
-		return fmt.Errorf("debug pause failed: %v", err)
-	}
 
 	if err := r.Reload(); err != nil {
 		return fmt.Errorf("failed to reload repo: %v", err)
