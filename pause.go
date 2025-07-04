@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 )
 
+// Original file-based implementation - commented out for testing
+/*
 func debugPause(syncID, format string, a ...interface{}) error {
 	if os.Getenv("DEBUG_PAUSE") != "" {
 		cwd, err := os.Getwd()
@@ -26,6 +26,17 @@ func debugPause(syncID, format string, a ...interface{}) error {
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
+	}
+	return nil
+}
+*/
+
+// New stdin-based implementation
+func debugPause(syncID, format string, a ...interface{}) error {
+	if os.Getenv("DEBUG_PAUSE") != "" {
+		logWithID(syncID, "[DEBUG_PAUSE] "+format, a...)
+		logWithID(syncID, "[DEBUG_PAUSE] Press Enter to continue...")
+		fmt.Scanln()
 	}
 	return nil
 }
