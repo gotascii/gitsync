@@ -1,6 +1,11 @@
 break ./main.go:139
+on 1 print "DEBUG: after commitChanges"
 break ./merge.go:23
+on 2 print "DEBUG: before creating branch"
 break ./merge.go:38
+on 3 print "DEBUG: before Reset"
 break ./merge.go:58
+on 4 print "DEBUG: after reset"
 break ./merge.go:114
+on 5 print "DEBUG: after AddGlob"
 continue
