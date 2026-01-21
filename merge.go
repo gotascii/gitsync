@@ -7,7 +7,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) error {
+func debugMerge(syncID string, localRepo *git.Repository, r *Repo) error {
 	localWorktree, err := localRepo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %v", err)
@@ -32,7 +32,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 		debugLogWithID(syncID, "Created local branch and set HEAD: %s", branchRef)
 	}
 
-
 	// 2. Some sort of ff-merge-like event
 	debugLogWithID(syncID, "Doing a ff merge")
 
@@ -48,7 +47,6 @@ func debugMerge(syncID, repoPath string, localRepo *git.Repository, r *Repo) err
 	// if err != nil {
 	// 	return fmt.Errorf("failed to soft reset: %v", err)
 	// }
-
 
 	// THIS IS A TERRIBLE IDEA
 	// 3. Manually check out all files from the remote commit

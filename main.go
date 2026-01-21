@@ -115,7 +115,7 @@ func GitSync(repoPath string, commitMsg string) error {
 		logWithID(syncID, "Fast-forwarding to remote changes...")
 
 		if os.Getenv("DEBUG_MERGE") != "" {
-			err := debugMerge(syncID, repoPath, localRepo, r)
+			err := debugMerge(syncID, localRepo, r)
 			if err != nil {
 				return fmt.Errorf("failed to merge: %v", err)
 			}
@@ -135,7 +135,6 @@ func GitSync(repoPath string, commitMsg string) error {
 	if err := commitChanges(syncID, localRepo, commitMsg); err != nil {
 		return fmt.Errorf("failed to commit uncommitted changes: %v", err)
 	}
-
 
 	if err := r.Reload(); err != nil {
 		return fmt.Errorf("failed to reload repo: %v", err)
