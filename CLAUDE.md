@@ -36,9 +36,6 @@ DEBUG_LOG=1 ./gitsync
 
 # Debug with Delve at key sync points
 dlv debug . --init debug.dlv -- [args]
-
-# Run with experimental go-git merge implementation
-DEBUG_MERGE=1 ./gitsync
 ```
 
 ### Advanced Debugging
@@ -46,9 +43,6 @@ DEBUG_MERGE=1 ./gitsync
 See [README.md](README.md#debugging) for basic Delve usage. The `debug.dlv` script sets breakpoints at these development-relevant points:
 
 - After committing local changes (`main.go:139`)
-- Before creating branches (`merge.go:23`) - experimental merge mode only
-- Before/after reset operations (`merge.go:38,58`) - experimental merge mode only
-- After staging files (`merge.go:114`) - experimental merge mode only
 
 ## Architecture
 
@@ -59,11 +53,10 @@ See [README.md](README.md#debugging) for basic Delve usage. The `debug.dlv` scri
 - **ssh.go**: SSH authentication handling with GIT_SSH_COMMAND support
 - **rename.go**: Case-sensitive file rename detection and handling
 - **log.go**: Logging system with unique sync IDs
-- **merge.go**: Debug merge functionality (experimental)
 
 ### Key Design Decisions
 
-1. **Git CLI vs go-git**: Production uses Git CLI for fast-forward merges due to go-git limitations with uncommitted files. Debug mode has experimental go-git implementation.
+1. **Pure go-git**: All git operations use go-git natively. Fast-forward merges use `worktree.Checkout` (unborn branch) or `worktree.Reset(MergeReset)` (existing branch). The `MergeReset` approach preserves uncommitted files as of go-git v5.16.5 (PR #1800).
 
 2. **Conservative Sync Strategy**: See [README.md](README.md#how-it-works) for user-facing workflow. Refuses potentially destructive operations.
 

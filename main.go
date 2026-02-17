@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/spf13/cobra"
@@ -114,17 +114,22 @@ func GitSync(repoPath string, commitMsg string) error {
 	} else if r.FastForwardSyncNeeded() {
 		logWithID(syncID, "Fast-forwarding to remote changes...")
 
-		if os.Getenv("DEBUG_MERGE") != "" {
-			err := debugMerge(syncID, localRepo, r)
-			if err != nil {
-				return fmt.Errorf("failed to merge: %v", err)
-			}
+		w, err := localRepo.Worktree()
+		if err != nil {
+			return fmt.Errorf("failed to get worktree: %v", err)
+		}
+		if r.LocalHeadRef == nil {
+			branchRef := plumbing.NewBranchReferenceName(r.LocalHeadRefName)
+			err = w.Checkout(&git.CheckoutOptions{
+				Branch: branchRef,
+				Hash:   r.RemoteHeadRef.Hash(),
+				Create: true,
+			})
 		} else {
-			remoteBranch := "origin/" + r.LocalHeadRefName
-			cmd := exec.Command("git", "-C", repoPath, "merge", "--ff-only", remoteBranch)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("failed to fast-forward: %s: %v", string(out), err)
-			}
+			err = w.Reset(&git.ResetOptions{Commit: r.RemoteHeadRef.Hash(), Mode: git.MergeReset})
+		}
+		if err != nil {
+			return fmt.Errorf("failed to fast-forward: %v", err)
 		}
 
 		logWithID(syncID, "Fast-forward complete")

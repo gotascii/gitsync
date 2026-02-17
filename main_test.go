@@ -380,10 +380,81 @@ func TestGitSync_NonEmptyLocalBehindNonEmptyRemote(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestGoGit_FastForwardDropsUncommitted verifies that go-git's fast-forward implementation
-// drops uncommitted files. This is why we use Git CLI in main.go instead of go-git's
-// native functionality for fast-forward operations.
-func TestGoGit_FastForwardDropsUncommitted(t *testing.T) {
+func TestGitSync_NonEmptyLocalBehindNonEmptyRemoteUncommitted(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	createCommit(t, localPath, "initial.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	clonedPath := t.TempDir()
+	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{URL: remotePath})
+	require.NoError(t, err)
+
+	remoteHash := createCommit(t, clonedPath, "remote.txt")
+	err = cloned.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	createUncommittedChange(t, localPath, "uncommitted.txt")
+
+	err = GitSync(localPath, "test commit")
+	assert.NoError(t, err)
+
+	head, err := localRepo.Head()
+	assert.NoError(t, err)
+
+	headCommit, err := localRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	assert.Equal(t, "test commit", headCommit.Message)
+
+	assert.Equal(t, 1, len(headCommit.ParentHashes))
+	assert.Equal(t, remoteHash, headCommit.ParentHashes[0])
+
+	_, err = os.Stat(filepath.Join(localPath, "initial.txt"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(localPath, "remote.txt"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(localPath, "uncommitted.txt"))
+	assert.NoError(t, err)
+
+	w, err := localRepo.Worktree()
+	assert.NoError(t, err)
+	status, err := w.Status()
+	assert.NoError(t, err)
+	assert.True(t, status.IsClean())
+}
+
+func TestGitSync_MergeDetected(t *testing.T) {
+	remotePath := setupRemoteRepo(t)
+
+	localPath, localRepo := setupLocalRepo(t)
+	addRemoteRepo(t, localPath, remotePath)
+	createCommit(t, localPath, "initial.txt")
+
+	err := localRepo.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	clonedPath := t.TempDir()
+	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{URL: remotePath})
+	require.NoError(t, err)
+
+	createCommit(t, clonedPath, "remote.txt")
+	err = cloned.Push(&git.PushOptions{})
+	require.NoError(t, err)
+
+	createCommit(t, localPath, "local.txt")
+
+	err = GitSync(localPath, "test commit")
+	assert.ErrorContains(t, err, "merge detected")
+}
+
+// TestGoGit_FastForwardDropsUncommitted verifies go-git's fast-forward behavior with uncommitted files.
+// Prior to v5.16.5, go-git's MergeReset dropped uncommitted files (which is why we use Git CLI in main.go).
+// As of v5.16.5, go-git preserves uncommitted files during MergeReset.
+func TestGoGit_FastForwardPreservesUncommitted(t *testing.T) {
 	// Create local repo
 	localPath, localRepo := setupLocalRepo(t)
 
@@ -434,72 +505,6 @@ func TestGoGit_FastForwardDropsUncommitted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Verify that go-git dropped the uncommitted file during fast-forward
-	require.NoFileExists(t, uncommittedPath)
-}
-
-func TestGoGit_FastForwardMergeDropsUncommitted(t *testing.T) {
-	// Create local repo
-	localPath, localRepo := setupLocalRepo(t)
-
-	// Create remote repo and add it as remote
-	remotePath := setupRemoteRepo(t)
-	addRemoteRepo(t, localPath, remotePath)
-
-	// Create and push initial commit
-	_ = createCommit(t, localPath, "initial.txt")
-	var err error
-	err = localRepo.Push(&git.PushOptions{})
-	require.NoError(t, err)
-
-	// Clone remote repo to simulate another user
-	clonedPath := t.TempDir()
-	cloned, err := git.PlainClone(clonedPath, false, &git.CloneOptions{
-		URL: remotePath,
-	})
-	require.NoError(t, err)
-
-	// Create a commit in the cloned repo and push it
-	_ = createCommit(t, clonedPath, "remote.txt")
-	err = cloned.Push(&git.PushOptions{})
-	require.NoError(t, err)
-
-	// Create an uncommitted file in local repo
-	createUncommittedChange(t, localPath, "uncommitted.txt")
-
-	// Verify uncommitted file exists before fast-forward
-	uncommittedPath := filepath.Join(localPath, "uncommitted.txt")
+	// As of v5.16.5, go-git preserves uncommitted files during MergeReset
 	require.FileExists(t, uncommittedPath)
-
-	// Fetch remote changes
-	err = localRepo.Fetch(&git.FetchOptions{})
-	require.NoError(t, err)
-
-	// Get remote master reference
-	remoteMaster, err := localRepo.Reference("refs/remotes/origin/master", true)
-	require.NoError(t, err)
-
-	// Attempt fast-forward using go-git's Merge
-	err = localRepo.Merge(*remoteMaster, git.MergeOptions{})
-	require.NoError(t, err)
-
-	// Verify the uncommitted file still exists
-	require.FileExists(t, uncommittedPath)
-
-	// Check if the file is tracked/committed
-	w, err := localRepo.Worktree()
-	require.NoError(t, err)
-	status, err := w.Status()
-	require.NoError(t, err)
-
-	// Check the status of our uncommitted file
-	fileStatus := status.File("uncommitted.txt")
-	t.Logf("File status: %+v", fileStatus)
-
-	// Get HEAD commit to see what was actually committed
-	head, err := localRepo.Head()
-	require.NoError(t, err)
-	headCommit, err := localRepo.CommitObject(head.Hash())
-	require.NoError(t, err)
-	t.Logf("HEAD commit message: %s", headCommit.Message)
 }
