@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "project-management": {
+      "source": "/Users/marney/Sites/project-management",
+      "sourceType": "local",
+      "computedHash": "9c33ce730c977e1e177dc4d9acda9305e9249f902c7fdfe7c03fb25228fe17c0"
+    }
+  }
+}
