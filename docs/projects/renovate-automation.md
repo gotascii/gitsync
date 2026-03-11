@@ -116,7 +116,7 @@ No Renovate config exists. CI will be in place (from I1) but without branch prot
 
 #### Tests
 
-- [ ] Renovate skips onboarding (config already exists) and goes directly to scanning dependencies
-- [ ] Renovate opens a grouped "Go dependencies" PR (or confirms all deps are up to date)
-- [ ] Renovate opens grouped PR and GitHub sends a notification — merge manually after CI passes
+- [x] Renovate skips onboarding (config already exists) and goes directly to scanning dependencies
+- [x] Renovate opens a grouped "Go dependencies" PR (or confirms all deps are up to date)
+- [x] Renovate opens grouped PR and GitHub sends a notification — merge manually after CI passes
 - [ ] No Dependabot security update PRs appear after disabling
