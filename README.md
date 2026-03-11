@@ -110,4 +110,4 @@ GitSync will exit with status code 1 and display an error message when:
 
 ## License
 
-[License Type] - See LICENSE file for details
+MIT - See LICENSE file for details
