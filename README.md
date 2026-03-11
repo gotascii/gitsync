@@ -4,13 +4,13 @@ GitSync is a command-line tool that automates Git repository synchronization, ha
 
 ## Features
 
-- 🔄 Automatic handling of uncommitted changes
-- ⚡ Fast-forward merges when possible
-- 📝 Case-sensitive file rename detection
-- 🔍 Detailed logging with unique sync IDs
-- 🚫 Merge conflict detection (prevents automatic merges that would create conflicts)
-- 🔁 Push/pull synchronization based on commit history
-- 🔑 Flexible SSH authentication support
+- Automatic handling of uncommitted changes
+- Fast-forward merges when possible
+- Case-sensitive file rename detection
+- Detailed logging with unique sync IDs
+- Merge conflict detection (prevents automatic merges that would create conflicts)
+- Push/pull synchronization based on commit history
+- Flexible SSH authentication support
 
 ## Installation
 

@@ -60,8 +60,8 @@ No `.github/` directory exists. Tests live in `main_test.go` (12 test functions 
 
 #### Tests
 
-- [ ] Push the workflow file — Actions tab shows a `CI` workflow run on `main`
-- [ ] `go test` step passes (green)
+- [x] Push the workflow file — Actions tab shows a `CI` workflow run on `main`
+- [x] `go test` step passes (green)
 - [ ] Open a test PR — CI runs and reports status on the PR
 
 ### [ ] I2: Configure branch protection on main

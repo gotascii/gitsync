@@ -88,7 +88,10 @@ func (r *Repo) populateCommits() error {
 	return nil
 }
 
-func (r *Repo) populateAncestory() error {
+func (r *Repo) populateAncestry() error {
+	if r.localCommit == nil || r.remoteCommit == nil {
+		return nil
+	}
 	isLocalAncestorOfRemote, err := r.localCommit.IsAncestor(r.remoteCommit)
 	if err != nil {
 		return fmt.Errorf("failed to check ancestry: %v", err)
@@ -117,8 +120,8 @@ func (r *Repo) Reload() error {
 	if err := r.populateCommits(); err != nil {
 		return fmt.Errorf("populating commits: %v", err)
 	}
-	if err := r.populateAncestory(); err != nil {
-		return fmt.Errorf("populating ancestory: %v", err)
+	if err := r.populateAncestry(); err != nil {
+		return fmt.Errorf("populating ancestry: %v", err)
 	}
 
 	return nil
