@@ -29,7 +29,7 @@ Renovate Bot (GitHub App)
 
 ## Issues
 
-### [ ] I1: Add GitHub Actions CI workflow
+### [x] I1: Add GitHub Actions CI workflow
 
 Add a `.github/workflows/ci.yml` that runs `go test` on every push and pull request. This is a prerequisite for Renovate's automerge — without it, Renovate merges immediately without validating that tests pass.
 
@@ -62,9 +62,9 @@ No `.github/` directory exists. Tests live in `main_test.go` (12 test functions 
 
 - [x] Push the workflow file — Actions tab shows a `CI` workflow run on `main`
 - [x] `go test` step passes (green)
-- [ ] Open a test PR — CI runs and reports status on the PR
+- [x] Open a test PR — CI runs and reports status on the PR (validated via Renovate PR in I3)
 
-### [ ] I2: Configure branch protection on main
+### [x] I2: Configure branch protection on main
 
 Require the CI status check to pass before any PR can be merged into `main`. This ensures Renovate's `platformAutomerge` waits for `go test` to go green rather than merging immediately.
 
@@ -74,16 +74,16 @@ No branch protection rules exist on `main`. Without them, `platformAutomerge` by
 
 #### Steps
 
-- [ ] Go to repo Settings → Branches → Add branch protection rule for `main`
-- [ ] Enable "Require status checks to pass before merging"
-- [ ] Search for and add the `test` status check (from the CI workflow job name)
-- [ ] Enable "Require branches to be up to date before merging"
-- [ ] Enable "Do not allow bypassing the above settings"
+- [x] Go to repo Settings → Branches → Add branch protection rule for `main`
+- [x] Enable "Require status checks to pass before merging"
+- [x] Search for and add the `test` status check (from the CI workflow job name)
+- [x] Enable "Require branches to be up to date before merging"
+- [x] Enable "Do not allow bypassing the above settings"
 
 #### Tests
 
-- [ ] Open a test PR with a failing `go test` — merge button is blocked
-- [ ] Fix the test — merge button becomes available after CI passes
+- [x] Open a test PR with a failing `go test` — merge button is blocked (validated via Renovate PR in I3)
+- [x] Fix the test — merge button becomes available after CI passes (validated via Renovate PR in I3)
 
 ### [ ] I3: Install and configure Renovate Bot
 
@@ -95,8 +95,8 @@ No Renovate config exists. CI will be in place (from I1) but without branch prot
 
 #### Steps
 
-- [ ] Install Renovate GitHub App on the repo via <https://github.com/apps/renovate> — enable for `gotascii/gitsync` only
-- [ ] Create `.github/renovate.json`:
+- [x] Install Renovate GitHub App on the repo via <https://github.com/apps/renovate> — enable for `gotascii/gitsync` only
+- [x] Create `.github/renovate.json`:
 
   ```json
   {
