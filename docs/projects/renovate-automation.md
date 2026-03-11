@@ -23,7 +23,7 @@ GitHub Repo
     └── renovate.json        ← Renovate config: automerge patch/minor after CI, group Go deps
 Renovate Bot (GitHub App)
     ├── Opens PRs for outdated/vulnerable deps
-    ├── Auto-merges patch + minor only after CI passes (enforced by branch protection)
+    ├── Opens grouped PRs → GitHub notifies → you merge manually after CI passes
     └── Holds major version bumps for manual review
 ```
 
@@ -39,7 +39,7 @@ No `.github/` directory exists. Tests live in `main_test.go` (12 test functions 
 
 #### Steps
 
-- [ ] Create `.github/workflows/ci.yml`:
+- [x] Create `.github/workflows/ci.yml`:
 
   ```yaml
   name: CI
@@ -87,7 +87,7 @@ No branch protection rules exist on `main`. Without them, `platformAutomerge` by
 
 ### [ ] I3: Install and configure Renovate Bot
 
-Enable the Renovate GitHub App on this repository and add a `renovate.json` config that automerges patch/minor Go dependency updates after CI passes, and groups all Go module updates into a single PR to reduce noise.
+Enable the Renovate GitHub App on this repository and add a `renovate.json` config that automatically opens grouped PRs for Go dependency updates. PRs require manual merge — GitHub notifies on PR open via the usual notification settings.
 
 #### Details About the System Prior to the Start of this Issue
 
@@ -106,9 +106,7 @@ No Renovate config exists. CI will be in place (from I1) but without branch prot
       {
         "matchManagers": ["gomod"],
         "groupName": "Go dependencies",
-        "matchUpdateTypes": ["patch", "minor", "digest"],
-        "automerge": true,
-        "platformAutomerge": true
+        "matchUpdateTypes": ["patch", "minor", "digest"]
       }
     ]
   }
@@ -120,5 +118,5 @@ No Renovate config exists. CI will be in place (from I1) but without branch prot
 
 - [ ] Renovate skips onboarding (config already exists) and goes directly to scanning dependencies
 - [ ] Renovate opens a grouped "Go dependencies" PR (or confirms all deps are up to date)
-- [ ] Patch/minor/digest PRs auto-merge without manual intervention after CI passes
+- [ ] Renovate opens grouped PR and GitHub sends a notification — merge manually after CI passes
 - [ ] No Dependabot security update PRs appear after disabling
