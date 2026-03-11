@@ -85,7 +85,7 @@ No branch protection rules exist on `main`. Without them, `platformAutomerge` by
 - [x] Open a test PR with a failing `go test` — merge button is blocked (validated via Renovate PR in I3)
 - [x] Fix the test — merge button becomes available after CI passes (validated via Renovate PR in I3)
 
-### [ ] I3: Install and configure Renovate Bot
+### [x] I3: Install and configure Renovate Bot
 
 Enable the Renovate GitHub App on this repository and add a `renovate.json` config that automatically opens grouped PRs for Go dependency updates. PRs require manual merge — GitHub notifies on PR open via the usual notification settings.
 
@@ -112,11 +112,8 @@ No Renovate config exists. CI will be in place (from I1) but without branch prot
   }
   ```
 
-- [ ] Disable Dependabot security updates in repo Settings → Code security → Dependabot security updates → Disable (to avoid Go noise-machine false positives)
-
 #### Tests
 
-- [ ] Renovate skips onboarding (config already exists) and goes directly to scanning dependencies
-- [ ] Renovate opens a grouped "Go dependencies" PR (or confirms all deps are up to date)
-- [ ] Renovate opens grouped PR and GitHub sends a notification — merge manually after CI passes
-- [ ] No Dependabot security update PRs appear after disabling
+- [x] Renovate skips onboarding (config already exists) and goes directly to scanning dependencies
+- [x] Renovate opens a grouped "Go dependencies" PR (or confirms all deps are up to date)
+- [x] Renovate opens grouped PR and GitHub sends a notification — merge manually after CI passes
