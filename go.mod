@@ -2,10 +2,10 @@ module github.com/gotascii/gitsync
 
 go 1.24.0
 
-toolchain go1.26.1
+toolchain go1.26.2
 
 require (
-	github.com/go-git/go-git/v5 v5.17.1
+	github.com/go-git/go-git/v5 v5.17.2
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
